@@ -1,0 +1,171 @@
+package view;
+
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.FlatteningPathIterator;
+import java.awt.geom.GeneralPath;
+import java.awt.geom.Line2D;
+import java.awt.geom.PathIterator;
+import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
+import java.time.Month;
+
+import javax.swing.JLabel;
+
+
+/**
+ * Classic 3 dials view for digital Clock
+ */
+ public class DigitalClock3DialsView extends DigitalClockView {
+    /**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+	private static int caps[] = { BasicStroke.CAP_BUTT, 
+        BasicStroke.CAP_SQUARE, BasicStroke.CAP_ROUND};
+    private static int joins[] = { BasicStroke.JOIN_MITER, 
+        BasicStroke.JOIN_BEVEL, BasicStroke.JOIN_ROUND};
+	private static Color colors[] = {Color.gray, Color.pink, Color.lightGray};
+	private static BasicStroke bs1 = new BasicStroke(1.0f);
+	
+	// three arms of clock
+    private Line2D lines[] = new Line2D[3];
+    private int rAmt[] = new int[lines.length];
+    private int speed[] = new int[lines.length];
+    private BasicStroke strokes[] = new BasicStroke[lines.length];
+    private GeneralPath path;
+    private Point2D[] pts;
+    private float size;
+    private Ellipse2D ellipse = new Ellipse2D.Double();
+	private BufferedImage bimg;
+
+	private JLabel date=null;
+	
+	
+	
+	
+	/**
+	 * init background
+	 */
+    public void init() {
+        setBackground(Color.white);
+        
+    }
+    
+    
+
+    public void draw(int hour,int minute,int second) {
+    	
+    	/*
+    	 * below code handles three arms as per time
+    	 */
+    	rAmt[2] = hour*30 - 90;
+    	rAmt[1] = minute*6 - 90;
+    	rAmt[0] = second*6 - 90;
+     	
+        repaint();
+    }
+    
+    public void drawDate(int month,int day,int year){
+    	
+    	date.setText(Month.of(month)+" "+day+", "+year);
+    }
+    
+    /**
+     * reset view: the shape of arms, etc
+     */
+    public void reset(int w, int h) {
+        size = (w > h) ? h/6f : w/6f;
+        for (int i = 0; i < lines.length; i++) {
+            lines[i] = new Line2D.Float(0,0,size,0);
+            strokes[i] = new BasicStroke(size/3, caps[i], joins[i]);
+            rAmt[i] = 270;		// vertical
+        }
+        speed[0] = 6;	// make second to move forward, but not the other
+        speed[1] = 0;
+        speed[2] = 0;
+
+        path = new GeneralPath();
+        path.moveTo(size, -size/2);
+        path.lineTo(size+size/2, 0);
+        path.lineTo(size, +size/2);
+
+        ellipse.setFrame(w/2-size*2-4.5f,h/2-size*2-4.5f,size*4,size*4);
+        double linApproxLen = 0.75*size*0.258819;	// sin(15 degree)
+        PathIterator pi = ellipse.getPathIterator(null, linApproxLen);
+        Point2D[] points = new Point2D[100];
+        int num_pts = 0;
+        while ( !pi.isDone() ) {
+            float[] pt = new float[6];
+            switch ( pi.currentSegment(pt) ) {
+                case FlatteningPathIterator.SEG_MOVETO:
+                case FlatteningPathIterator.SEG_LINETO:
+                    points[num_pts] = new Point2D.Float(pt[0], pt[1]);
+                    num_pts++;
+            }
+            pi.next();
+        }
+        pts = new Point2D[num_pts];
+        System.arraycopy(points, 0, pts, 0, num_pts);
+    }
+    
+	public void paint(Graphics g) {	
+		Dimension d = getSize();
+		// DD: **Note how the view is updating itself based on a calculation (the step())
+        // call. This is *wrong* -- it should get a notification from
+        // the controller, which is alerted by the model, what the current time is. 
+		//step(d.width, d.height);
+		Graphics2D g2 = createGraphics2D(d.width, d.height);
+		drawClockArms(d.width, d.height, g2);
+		
+		g2.dispose();
+		g.drawImage(bimg, 0, 0, this);
+	}
+	
+    public Graphics2D createGraphics2D(int w, int h) {
+    	// boilerplate Java 2D graphics code
+        Graphics2D g2 = null;
+        if (bimg == null || bimg.getWidth() != w || bimg.getHeight() != h) {
+            bimg = (BufferedImage) createImage(w, h);
+            reset(w, h);
+        } 
+        g2 = bimg.createGraphics();
+        g2.setBackground(getBackground());
+        g2.clearRect(0, 0, w, h);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                            RenderingHints.VALUE_ANTIALIAS_ON);
+        return g2;
+    }
+    
+	private void drawClockArms(int w, int h, Graphics2D g2) {
+
+        ellipse.setFrame(w/2-size,h/2-size,size*2,size*2);
+        g2.setColor(Color.black);
+        g2.draw(ellipse);
+
+        for (int i = 0; i < lines.length; i++) {
+            AffineTransform at = AffineTransform.getTranslateInstance(w/2,h/2);
+            at.rotate(Math.toRadians(rAmt[i]));
+            g2.setStroke(strokes[i]);
+            g2.setColor(colors[i]);
+            g2.draw(at.createTransformedShape(lines[i]));
+            g2.draw(at.createTransformedShape(path));
+        }
+
+        g2.setStroke(bs1);
+        g2.setColor(Color.black);
+        for (int i = 0; i < pts.length; i++) {
+            ellipse.setFrame(pts[i].getX(), pts[i].getY(), 9, 9);
+            g2.draw(ellipse);
+        }
+    }
+	
+
+}

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+exec java -server -cp dist/pricer.jar org.egge.pricer.Main "$@"
